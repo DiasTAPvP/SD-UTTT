@@ -1,4 +1,3 @@
-// Language: Java
 package dk.easv.bll.bot;
 
 import dk.easv.bll.field.IField;
@@ -10,7 +9,7 @@ import java.util.List;
 import java.util.Random;
 
 public class BotTest implements IBot {
-    final int moveTimeMs = 500;
+    final int moveTimeMs = 100;
     private String BOT_NAME = getClass().getSimpleName();
     private static final double UCT_EXPLORATION = 1.4142;
     private final Random rnd = new Random();
@@ -18,7 +17,7 @@ public class BotTest implements IBot {
     // Hold the current game state for use in evaluateMove
     private IGameState currentGameState;
 
-    private IMove findBestCenterMove(IGameState state) {
+    /*private IMove findBestCenterMove(IGameState state) {
         List<IMove> moves = state.getField().getAvailableMoves();
         for (IMove move : moves) {
             if (isCenter(move)) {
@@ -26,7 +25,7 @@ public class BotTest implements IBot {
             }
         }
         return null;
-    }
+    }*/
 
     // New helper: scan for an immediate winning move on the macroboard.
     private IMove findImmediateWinningMove(IGameState state) {
@@ -46,7 +45,7 @@ public class BotTest implements IBot {
         // Save the state in the field for access in evaluateMove
         currentGameState = state;
 
-        IMove centerMove = null;
+        /*IMove centerMove = null;
         List<IMove> availableMoves = state.getField().getAvailableMoves();
         for (IMove move : availableMoves) {
             if (move.getX() == 4 && move.getY() == 4) {
@@ -56,7 +55,7 @@ public class BotTest implements IBot {
         }
         if (centerMove != null) {
             return centerMove;
-        }
+        }*/
 
         // Check for an immediate win on the big board.
         IMove winMove = findImmediateWinningMove(state);
@@ -64,10 +63,10 @@ public class BotTest implements IBot {
             return winMove;
         }
 
-        IMove bestCenterMove = findBestCenterMove(state);
+        /*IMove bestCenterMove = findBestCenterMove(state);
         if (bestCenterMove != null) {
             return bestCenterMove;
-        }
+        }*/
 
         long endTime = System.currentTimeMillis() + moveTimeMs;
         Node root = new Node(null, cloneState(state), null);
@@ -123,13 +122,13 @@ public class BotTest implements IBot {
         // Base position values for the 9x9 board.
         int[][] positionValues = {
                 {3, 2, 3, 2, 3, 2, 3, 2, 3},
-                {2, 4, 2, 4, 2, 4, 2, 4, 2},
+                {2, 2, 2, 4, 2, 4, 2, 2, 2},
                 {3, 2, 3, 2, 3, 2, 3, 2, 3},
                 {2, 4, 2, 4, 2, 4, 2, 4, 2},
                 {3, 2, 3, 2, 1, 2, 3, 2, 3},
                 {2, 4, 2, 4, 2, 4, 2, 4, 2},
                 {3, 2, 3, 2, 3, 2, 3, 2, 3},
-                {2, 4, 2, 4, 2, 4, 2, 4, 2},
+                {2, 2, 2, 4, 2, 4, 2, 2, 2},
                 {3, 2, 3, 2, 3, 2, 3, 2, 3}
         };
 
@@ -145,7 +144,7 @@ public class BotTest implements IBot {
         }
 
         // Extra bonus for cells in the center micro board (optional slight bonus).
-        for (int x = 3; x <= 5; x++) {
+        /*for (int x = 3; x <= 5; x++) {
             for (int y = 3; y <= 5; y++) {
                 if (board[x][y].equals("0")) {
                     score += 5;
@@ -153,7 +152,7 @@ public class BotTest implements IBot {
                     score -= 5;
                 }
             }
-        }
+        }*/
 
         // Strong bonus for controlling the center of the big board.
         String[][] macroBoard = state.getField().getMacroboard();
@@ -168,14 +167,14 @@ public class BotTest implements IBot {
         return score;
     }
 
-    private boolean isCenter(IMove move) {
+    /*private boolean isCenter(IMove move) {
         if (move.getX() == 4 && move.getY() == 4) {
             return true;
         }
         int localX = move.getX() % 3;
         int localY = move.getY() % 3;
         return localX == 1 && localY == 1;
-    }
+    }*/
 
     private int simulate(IGameState simState) {
         IGameState temp = cloneState(simState);
