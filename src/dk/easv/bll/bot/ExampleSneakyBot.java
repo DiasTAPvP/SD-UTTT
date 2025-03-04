@@ -12,6 +12,8 @@ import java.util.Random;
 public class ExampleSneakyBot implements IBot {
     final int moveTimeMs = 1000;
     private String BOT_NAME = getClass().getSimpleName();
+    private static final double UCT_EXPLORATION = 1.4142;
+    private final Random rnd = new Random();
 
     private GameSimulator createSimulator(IGameState state) {
         GameSimulator simulator = new GameSimulator(new GameState());
@@ -28,6 +30,7 @@ public class ExampleSneakyBot implements IBot {
     public IMove doMove(IGameState state) {
         return calculateWinningMove(state, moveTimeMs);
     }
+
     // Plays single games until it wins and returns the first move for that. If iterations reached with no clear win, just return random valid move
     private IMove calculateWinningMove(IGameState state, int maxTimeMs){
         long time = System.currentTimeMillis();
