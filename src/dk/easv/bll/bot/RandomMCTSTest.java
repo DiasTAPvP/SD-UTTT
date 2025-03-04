@@ -7,21 +7,11 @@ import dk.easv.bll.move.IMove;
 import dk.easv.bll.move.Move;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-/**
- * READ_______________________________________
- * THIS BOT IS OLD, DO NOT USE, DO NOT UPDATE
- * CHECK OUT RANDOMMCTSTEST INSTEAD
- * ___________________________________________
- */
-
-
-
-
-
-public class BotTest implements IBot {
+public class RandomMCTSTest implements IBot {
     final int moveTimeMs = 100;
     private String BOT_NAME = getClass().getSimpleName();
     private static final double UCT_EXPLORATION = 1.4142;
@@ -29,16 +19,6 @@ public class BotTest implements IBot {
 
     // Hold the current game state for use in evaluateMove
     private IGameState currentGameState;
-
-    /*private IMove findBestCenterMove(IGameState state) {
-        List<IMove> moves = state.getField().getAvailableMoves();
-        for (IMove move : moves) {
-            if (isCenter(move)) {
-                return move;
-            }
-        }
-        return null;
-    }*/
 
     // New helper: scan for an immediate winning move on the macroboard.
     private IMove findImmediateWinningMove(IGameState state) {
@@ -55,6 +35,48 @@ public class BotTest implements IBot {
             }
         }
         return null;
+    }
+
+    // Check if a move results in a win on the sub-board
+    private boolean isWinningMove(IGameState state, IMove move, String player) {
+        String[][] board = Arrays.stream(state.getField().getBoard()).map(String[]::clone).toArray(String[][]::new);
+        board[move.getX()][move.getY()] = player;
+
+        int startX = move.getX() - (move.getX() % 3);
+        if (board[startX][move.getY()].equals(player))
+            if (board[startX][move.getY()].equals(board[startX + 1][move.getY()]) &&
+                    board[startX + 1][move.getY()].equals(board[startX + 2][move.getY()]))
+                return true;
+
+        int startY = move.getY() - (move.getY() % 3);
+        if (board[move.getX()][startY].equals(player))
+            if (board[move.getX()][startY].equals(board[move.getX()][startY + 1]) &&
+                    board[move.getX()][startY + 1].equals(board[move.getX()][startY + 2]))
+                return true;
+
+        if (board[startX][startY].equals(player))
+            if (board[startX][startY].equals(board[startX + 1][startY + 1]) &&
+                    board[startX + 1][startY + 1].equals(board[startX + 2][startY + 2]))
+                return true;
+
+        if (board[startX][startY + 2].equals(player))
+            if (board[startX][startY + 2].equals(board[startX + 1][startY + 1]) &&
+                    board[startX + 1][startY + 1].equals(board[startX + 2][startY]))
+                return true;
+
+        return false;
+    }
+
+    // Compile a list of all available winning moves
+    private List<IMove> getWinningMoves(IGameState state) {
+        String player = currentPlayer(state) == 0 ? "0" : "1";
+        List<IMove> avail = state.getField().getAvailableMoves();
+        List<IMove> winningMoves = new ArrayList<>();
+        for (IMove move : avail) {
+            if (isWinningMove(state, move, player))
+                winningMoves.add(move);
+        }
+        return winningMoves;
     }
 
     @Override
@@ -75,10 +97,11 @@ public class BotTest implements IBot {
             return winMove;
         }
 
-        /*IMove bestCenterMove = findBestCenterMove(state);
-        if (bestCenterMove != null) {
-            return bestCenterMove;
-        }*/
+        // Check for winning moves on the sub-boards.
+        List<IMove> winMoves = getWinningMoves(state);
+        if (!winMoves.isEmpty()) {
+            return winMoves.get(0);
+        }
 
         long endTime = System.currentTimeMillis() + moveTimeMs;
         Node root = new Node(null, cloneState(state), null);
@@ -111,6 +134,17 @@ public class BotTest implements IBot {
             alpha = Math.max(alpha, current.score);
         }
         return current;
+    }
+
+    private void parallelExpandNode(Node node) {
+        List<IMove> moves = node.state.getField().getAvailableMoves();
+        moves.parallelStream().forEach(move -> {
+            IGameState newState = cloneState(node.state);
+            updateGame(newState, move, currentPlayer(newState));
+            synchronized (node.children) {
+                node.children.add(new Node(move, newState, node));
+            }
+        });
     }
 
     private void expandNode(Node node) {
@@ -160,45 +194,29 @@ public class BotTest implements IBot {
         return false;
     }
 
+
     private int evaluateBoard(IGameState state) {
         int score = 0;
         String[][] board = state.getField().getBoard();
+        String[][] macroBoard = state.getField().getMacroboard();
 
+        // Check for winning patterns
         if (isWinningPattern(board, "0")) score += 100;
         if (isWinningPattern(board, "1")) score -= 100;
 
-        int moveNumber = state.getMoveNumber();
-        int[][] positionValues;
+        // Evaluate positions
+        int[][] positionValues = {
+                {3, 2, 3, 2, 3, 2, 3, 2, 3},
+                {2, 1, 2, 4, 1, 4, 2, 1, 2},
+                {3, 2, 3, 2, 3, 2, 3, 2, 3},
+                {2, 4, 2, 5, 3, 5, 2, 4, 2},
+                {3, 1, 3, 3, 1, 3, 3, 1, 3},
+                {2, 4, 2, 5, 3, 5, 2, 4, 2},
+                {3, 2, 3, 2, 3, 2, 3, 2, 3},
+                {2, 1, 2, 4, 2, 4, 2, 1, 2},
+                {3, 2, 3, 2, 3, 2, 3, 2, 3}
+        };
 
-        // Early game: prioritize corners and center
-        if (moveNumber < 20) {
-            positionValues = new int[][] {
-                    {5, 2, 5, 5, 2, 5, 5, 2, 5},
-                    {2, 1, 2, 4, 1, 4, 2, 1, 2},
-                    {5, 2, 5, 5, 2, 5, 5, 2, 5},
-                    {2, 4, 2, 5, 3, 5, 2, 4, 2},
-                    {5, 1, 5, 3, 1, 3, 5, 1, 5},
-                    {2, 4, 2, 5, 3, 5, 2, 4, 2},
-                    {5, 2, 5, 5, 2, 5, 5, 2, 5},
-                    {2, 1, 2, 3, 2, 3, 2, 1, 2},
-                    {5, 2, 5, 5, 2, 5, 5, 2, 5}
-            };
-        } else {
-            // Mid to late game: prioritize winning and blocking
-            positionValues = new int[][] {
-                    {3, 2, 3, 2, 3, 2, 3, 2, 3},
-                    {2, 1, 2, 4, 1, 4, 2, 1, 2},
-                    {3, 2, 3, 2, 3, 2, 3, 2, 3},
-                    {2, 4, 2, 5, 3, 5, 2, 4, 2},
-                    {3, 1, 3, 3, 1, 3, 3, 1, 3},
-                    {2, 4, 2, 5, 3, 5, 2, 4, 2},
-                    {3, 2, 3, 2, 3, 2, 3, 2, 3},
-                    {2, 1, 2, 4, 2, 4, 2, 1, 2},
-                    {3, 2, 3, 2, 3, 2, 3, 2, 3}
-            };
-        }
-
-        // Base scoring.
         for (int x = 0; x < 9; x++) {
             for (int y = 0; y < 9; y++) {
                 if (board[x][y].equals("0")) {
@@ -209,19 +227,7 @@ public class BotTest implements IBot {
             }
         }
 
-        // Extra bonus for cells in the center micro board (optional slight bonus).
-        /*for (int x = 3; x <= 5; x++) {
-            for (int y = 3; y <= 5; y++) {
-                if (board[x][y].equals("0")) {
-                    score += 5;
-                } else if (board[x][y].equals("1")) {
-                    score -= 5;
-                }
-            }
-        }*/
-
-        // Strong bonus for controlling the center of the big board.
-        String[][] macroBoard = state.getField().getMacroboard();
+        // Bonus for controlling the center of the macroboard
         if (macroBoard != null) {
             String center = macroBoard[1][1];
             if (center.equals("0")) score += 50;
@@ -239,17 +245,10 @@ public class BotTest implements IBot {
             if (macroBoard[0][0].equals("1") && macroBoard[1][1].equals("1") && macroBoard[2][2].equals(IField.AVAILABLE_FIELD)) score -= 30;
             if (macroBoard[0][2].equals("1") && macroBoard[1][1].equals("1") && macroBoard[2][0].equals(IField.AVAILABLE_FIELD)) score -= 30;
         }
+
         return score;
     }
 
-    /*private boolean isCenter(IMove move) {
-        if (move.getX() == 4 && move.getY() == 4) {
-            return true;
-        }
-        int localX = move.getX() % 3;
-        int localY = move.getY() % 3;
-        return localX == 1 && localY == 1;
-    }*/
 
     private int simulate(IGameState simState) {
         IGameState temp = cloneState(simState);
