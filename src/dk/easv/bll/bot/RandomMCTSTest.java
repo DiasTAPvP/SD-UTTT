@@ -298,7 +298,7 @@ public class RandomMCTSTest implements IBot {
         } else if (totalMoves < 40) {
             return 1.4142;
         } else {
-            return 0.5;
+            return 1.4142;
         }
     }
 
