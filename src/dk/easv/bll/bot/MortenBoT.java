@@ -11,7 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-public class RandomMCTSTest implements IBot {
+public class MortenBoT implements IBot {
     final int moveTimeMs = 100;
     private String BOT_NAME = getClass().getSimpleName();
     private static final double UCT_EXPLORATION = 1.4142;
@@ -79,15 +79,34 @@ public class RandomMCTSTest implements IBot {
         return winningMoves;
     }
 
+    private List<IMove> getBlockingMoves(IGameState state) {
+        String opponent = currentPlayer(state) == 0 ? "1" : "0";
+        List<IMove> avail = state.getField().getAvailableMoves();
+        List<IMove> blockingMoves = new ArrayList<>();
+        for (IMove move : avail) {
+            if (isWinningMove(state, move, opponent)) {
+                blockingMoves.add(move);
+        }
+    }
+    return blockingMoves;
+}
+
     @Override
     public IMove doMove(IGameState state) {
         // Save the state in the field for access in evaluateMove
         currentGameState = state;
 
         if (state.getMoveNumber() == 0) {
-            IMove firstCenter = new Move(4, 4);
-            if (state.getField().getAvailableMoves().contains(firstCenter)) {
-                return firstCenter;
+            List<IMove> cornerMoves = Arrays.asList(
+                    new Move(3, 3),
+                    new Move(3, 5),
+                    new Move(5, 3),
+                    new Move(5, 5)
+            );
+            for (IMove cornerMove : cornerMoves) {
+                if (state.getField().getAvailableMoves().contains(cornerMove)) {
+                    return cornerMove;
+                }
             }
         }
 
@@ -101,6 +120,12 @@ public class RandomMCTSTest implements IBot {
         List<IMove> winMoves = getWinningMoves(state);
         if (!winMoves.isEmpty()) {
             return winMoves.get(0);
+        }
+
+        //Check for blocking moves
+        List<IMove> blockingMoves = getBlockingMoves(state);
+        if (!blockingMoves.isEmpty()) {
+            return blockingMoves.get(0);
         }
 
         long endTime = System.currentTimeMillis() + moveTimeMs;
@@ -160,12 +185,72 @@ public class RandomMCTSTest implements IBot {
         }
     }
 
-    // In this example, evaluateMove is computed by applying the move heuristics via evaluateBoard.
+    private boolean leadsToWonSubBoard(IGameState state, IMove move) {
+        String [][] macroBoard = state.getField().getMacroboard();
+        int macroX = move.getX() / 3;
+        int macroY = move.getY() / 3;
+        return !macroBoard[macroX][macroY].equals(IField.AVAILABLE_FIELD);
+    }
+
+
+
+    private List<IMove> getImmediateThreats(IGameState state, String opponent) {
+        List<IMove> threats = new ArrayList<>();
+        List<IMove> availableMoves = state.getField().getAvailableMoves();
+        for (IMove move : availableMoves) {
+            if (isWinningMove(state, move, opponent)) {
+                threats.add(move);
+            }
+        }
+        return threats;
+    }
+
+    private List<IMove> getFutureThreats(IGameState state, String opponent, int depth) {
+        List<IMove> futureThreats = new ArrayList<>();
+        if (depth == 0) return futureThreats;
+
+        List<IMove> availableMoves = state.getField().getAvailableMoves();
+        for (IMove move : availableMoves) {
+            IGameState tempState = cloneState(state);
+            updateGame(tempState, move, currentPlayer(tempState));
+            List<IMove> immediateThreats = getImmediateThreats(tempState, opponent);
+            futureThreats.addAll(immediateThreats);
+
+            for (IMove threat : immediateThreats) {
+                IGameState threatState = cloneState(tempState);
+                updateGame(threatState, threat, currentPlayer(threatState));
+                futureThreats.addAll(getFutureThreats(threatState, opponent, depth - 1));
+            }
+        }
+        return futureThreats;
+    }
+
+    private int evaluateThreats(IGameState state, String opponent) {
+        int score = 0;
+        List<IMove> immediateThreats = getImmediateThreats(state, opponent);
+        score -= immediateThreats.size() * 10; // Immediate threats are more severe
+
+        List<IMove> futureThreats = getFutureThreats(state, opponent, 2); // Look ahead 2 moves
+        score -= futureThreats.size() * 5; // Future threats are less severe but still important
+
+        return score;
+    }
+
     private int evaluateMove(IMove move) {
-        // Use the current state stored in the field.
         IGameState tempState = cloneState(currentGameState);
         updateGame(tempState, move, currentPlayer(tempState));
-        return evaluateBoard(tempState);
+        int score = evaluateBoard(tempState);
+
+        // Penalize moves that lead to a won sub-board
+        if (leadsToWonSubBoard(tempState, move)) {
+            score -= 50;
+        }
+
+        // Evaluate threats
+        String opponent = currentPlayer(tempState) == 0 ? "1" : "0";
+        score += evaluateThreats(tempState, opponent);
+
+        return score;
     }
 
     private boolean isWinningPattern(String[][] board, String player) {
@@ -194,26 +279,117 @@ public class RandomMCTSTest implements IBot {
         return false;
     }
 
+    private int countThreats(String[][] board, String player) {
+        int threats = 0;
+
+        for (int bx = 0; bx < 9; bx += 3) {
+            for (int by = 0; by < 9; by += 3) {
+                threats += checkLocalThreats(board, bx, by, player);
+            }
+        }
+        return threats;
+    }
+
+    private int checkLocalThreats(String[][] board, int startX, int startY, String player) {
+        int localThreats = 0;
+
+        int[][][] lines = {
+                {{0, 0}, {0, 1}, {0, 2}}, {{1, 0}, {1, 1}, {1, 2}}, {{2, 0}, {2, 1}, {2, 2}}, // rows
+                {{0, 0}, {1, 0}, {2, 0}}, {{0, 1}, {1, 1}, {2, 1}}, {{0, 2}, {1, 2}, {2, 2}}, // cols
+                {{0, 0}, {1, 1}, {2, 2}}, {{0, 2}, {1, 1}, {2, 0}}  // diagonals
+        };
+        for (int[][] line : lines) {
+            int countPlayer = 0;
+            int countEmpty = 0;
+            for (int[] cell : line) {
+                String val = board[startX + cell[0]][startY + cell[1]];
+                if (val.equals(player)) countPlayer++;
+                else if (val.equals(".")) countEmpty++;
+
+            }
+            if (countPlayer == 2 && countEmpty == 1) localThreats++;
+        }
+        return localThreats;
+    }
+
+    private int evaluateFutureWins(IGameState state) {
+        int score = 0;
+        String[][] macroBoard = state.getField().getMacroboard();
+        for (int x = 0; x < 3; x++) {
+            for (int y = 0; y < 3; y++) {
+                if (macroBoard[x][y].equals(IField.AVAILABLE_FIELD)) {
+                    score += 10;
+                }
+            }
+        }
+        return score;
+    }
+
+
+    private int evaluateMacroBoardControl(IGameState state) {
+        int score = 0;
+        String[][] macroBoard = state.getField().getMacroboard();
+        for (int x = 0; x < 3; x++) {
+            for (int y = 0; y < 3; y++) {
+                if (macroBoard[x][y].equals("0")) {
+                    score += 15;
+                } else if (macroBoard[x][y].equals("1")) {
+                    score -= 15;
+                }
+            }
+        }
+        return score;
+    }
+
+    private int countComboMoves(String[][] board, String player) {
+        int combos = 0;
+        int[][][] comboPatterns = {
+                {{0, 0}, {0, 1}}, {{0, 0}, {1, 0}}, {{0, 0}, {1, 1}}, // Top-left corner
+                {{0, 2}, {0, 1}}, {{0, 2}, {1, 2}}, {{0, 2}, {1, 1}}, // Top-right corner
+                {{2, 0}, {1, 0}}, {{2, 0}, {2, 1}}, {{2, 0}, {1, 1}}, // Bottom-left corner
+                {{2, 2}, {1, 2}}, {{2, 2}, {2, 1}}, {{2, 2}, {1, 1}}  // Bottom-right corner
+        };
+
+        for (int bx = 0; bx < 9; bx += 3) {
+            for (int by = 0; by < 9; by += 3) {
+                for (int[][] pattern : comboPatterns) {
+                    int countPlayer = 0;
+                    int countEmpty = 0;
+                    for (int[] cell : pattern) {
+                        String val = board[bx + cell[0]][by + cell[1]];
+                        if (val.equals(player)) countPlayer++;
+                        else if (val.equals(".")) countEmpty++;
+                    }
+                    if (countPlayer == 1 && countEmpty == 1) combos++;
+                }
+            }
+        }
+        return combos;
+    }
+
+
 
     private int evaluateBoard(IGameState state) {
         int score = 0;
+        score += evaluateMacroBoardControl(state);
+        score += evaluateFutureWins(state);
         String[][] board = state.getField().getBoard();
         String[][] macroBoard = state.getField().getMacroboard();
 
         // Check for winning patterns
-        if (isWinningPattern(board, "0")) score += 100;
-        if (isWinningPattern(board, "1")) score -= 100;
+        if (isWinningPattern(board, "0")) score += 20;
+        if (isWinningPattern(board, "1")) score -= 20;
 
         // Evaluate positions
         int[][] positionValues = {
                 {3, 2, 3, 2, 3, 2, 3, 2, 3},
-                {2, 1, 2, 4, 1, 4, 2, 1, 2},
+                {2, 2, 2, 4, 2, 4, 2, 2, 2},
                 {3, 2, 3, 2, 3, 2, 3, 2, 3},
                 {2, 4, 2, 5, 3, 5, 2, 4, 2},
-                {3, 1, 3, 3, 1, 3, 3, 1, 3},
+                {3, 2, 3, 3, 1, 3, 3, 2, 3},
                 {2, 4, 2, 5, 3, 5, 2, 4, 2},
                 {3, 2, 3, 2, 3, 2, 3, 2, 3},
-                {2, 1, 2, 4, 2, 4, 2, 1, 2},
+                {2, 2, 2, 4, 2, 4, 2, 2, 2},
                 {3, 2, 3, 2, 3, 2, 3, 2, 3}
         };
 
@@ -226,6 +402,14 @@ public class RandomMCTSTest implements IBot {
                 }
             }
         }
+
+        //Evaluate threats
+        score += 10 * countThreats(board, "0");
+        score -= 10 * countThreats(board, "1");
+
+        //Evaluate combos
+        score += 3 * countComboMoves(board, "0");
+        score -= 3 * countComboMoves(board, "1");
 
         // Bonus for controlling the center of the macroboard
         if (macroBoard != null) {
