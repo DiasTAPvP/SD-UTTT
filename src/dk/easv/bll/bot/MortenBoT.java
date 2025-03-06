@@ -11,6 +11,16 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
+/**
+ *
+ * Bot created by:
+ * Christoffer Abraham
+ * Morten Bo Kristensen
+ * William Erik Juhl Rasmussen
+ * Lucas Gandil Nielsen
+ *
+ */
+
 public class MortenBoT implements IBot {
     final int moveTimeMs = 100;
     private String BOT_NAME = getClass().getSimpleName();
@@ -122,7 +132,7 @@ public class MortenBoT implements IBot {
             return winMoves.get(0);
         }
 
-        //Check for blocking moves
+        //Check for moves that can block the opponent
         List<IMove> blockingMoves = getBlockingMoves(state);
         if (!blockingMoves.isEmpty()) {
             return blockingMoves.get(0);
@@ -147,7 +157,7 @@ public class MortenBoT implements IBot {
         return best.move != null ? best.move : randomMove(state);
     }
 
-    // MCTS core methods
+    // MCTS
 
     private Node selectNode(Node node, double alpha, double beta) {
         Node current = node;
@@ -161,7 +171,8 @@ public class MortenBoT implements IBot {
         return current;
     }
 
-    private void parallelExpandNode(Node node) {
+    // Unused, made bot weaker on tests
+    /*private void parallelExpandNode(Node node) {
         List<IMove> moves = node.state.getField().getAvailableMoves();
         moves.parallelStream().forEach(move -> {
             IGameState newState = cloneState(node.state);
@@ -170,7 +181,7 @@ public class MortenBoT implements IBot {
                 node.children.add(new Node(move, newState, node));
             }
         });
-    }
+    }*/
 
     private void expandNode(Node node) {
         List<IMove> moves = node.state.getField().getAvailableMoves();
@@ -185,6 +196,7 @@ public class MortenBoT implements IBot {
         }
     }
 
+   // Checks if a move would lead the opponent to a won sub-board to help evaluateBoard
     private boolean leadsToWonSubBoard(IGameState state, IMove move) {
         String [][] macroBoard = state.getField().getMacroboard();
         int macroX = move.getX() / 3;
@@ -193,7 +205,7 @@ public class MortenBoT implements IBot {
     }
 
 
-
+    //Checks for threats from the opponent that will lead to sub-board or macro-board wins
     private List<IMove> getImmediateThreats(IGameState state, String opponent) {
         List<IMove> threats = new ArrayList<>();
         List<IMove> availableMoves = state.getField().getAvailableMoves();
@@ -205,6 +217,7 @@ public class MortenBoT implements IBot {
         return threats;
     }
 
+    //Deeper analysis of future threats
     private List<IMove> getFutureThreats(IGameState state, String opponent, int depth) {
         List<IMove> futureThreats = new ArrayList<>();
         if (depth == 0) return futureThreats;
@@ -254,7 +267,7 @@ public class MortenBoT implements IBot {
     }
 
     private boolean isWinningPattern(String[][] board, String player) {
-        // Define winning patterns (e.g., rows, columns, diagonals)
+        // Define winning patterns
         int[][][] patterns = {
                 {{0, 0}, {0, 1}, {0, 2}},
                 {{1, 0}, {1, 1}, {1, 2}},
@@ -341,6 +354,7 @@ public class MortenBoT implements IBot {
         return score;
     }
 
+    //Tries to combo moves together to create a winning sub-board
     private int countComboMoves(String[][] board, String player) {
         int combos = 0;
         int[][][] comboPatterns = {
@@ -453,6 +467,7 @@ public class MortenBoT implements IBot {
         return totalScore;
     }
 
+    //MCTS
     private void backpropagate(Node node, int result) {
         Node current = node;
         while (current != null) {
@@ -461,6 +476,7 @@ public class MortenBoT implements IBot {
             current = current.parent;
         }
     }
+
 
     private Node bestChild(Node node) {
         double bestScore = Double.NEGATIVE_INFINITY;
@@ -507,6 +523,7 @@ public class MortenBoT implements IBot {
         return best;
     }
 
+    //Allows random moves to be made if the bot is unable to find a good move
     private IMove randomMove(IGameState state) {
         List<IMove> moves = state.getField().getAvailableMoves();
         return moves.get(rnd.nextInt(moves.size()));
